@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import axios from 'axios';
@@ -10,8 +10,9 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [workbooks, setWorkbooks] = useState([]);
   const [selectedWorkbook, setSelectedWorkbook] = useState(null);
+  const vizContainerRef = useRef(null);
+  const vizRef = useRef(null);
 
-  // Fetch workbooks from the API
   useEffect(() => {
     const fetchWorkbooks = async () => {
       const token = localStorage.getItem('token');
@@ -21,7 +22,7 @@ const Dashboard = () => {
       }
 
       try {
-        const response = await axios.get('https://localhost:5000/api/workbooks', {
+        const response = await axios.get('http://localhost:5000/api/workbooks', {
           headers: { Authorization: `Bearer ${token}` }
         });
         setWorkbooks(response.data.workbooks);
@@ -30,14 +31,12 @@ const Dashboard = () => {
         }
       } catch (error) {
         console.error('Failed to fetch workbooks:', error);
-        alert("Failed to load workbooks. Please try again later.");
       }
     };
 
     fetchWorkbooks();
   }, [navigate]);
 
-  // Fetch Tableau token and configuration when a workbook is selected
   useEffect(() => {
     const fetchTableauToken = async () => {
       if (!selectedWorkbook) return;
@@ -57,7 +56,7 @@ const Dashboard = () => {
         setTableauConfig(response.data);
       } catch (error) {
         console.error('Failed to fetch Tableau token:', error);
-        alert("Failed to fetch Tableau token. Please check your Tableau configuration.");
+        // For demo purposes, we'll show a placeholder
       } finally {
         setLoading(false);
       }
@@ -66,7 +65,36 @@ const Dashboard = () => {
     fetchTableauToken();
   }, [navigate, selectedWorkbook]);
 
-  // Handle user logout
+  useEffect(() => {
+    if (tableauConfig && tableauToken && vizContainerRef.current && window.tableau) {
+      // Dispose of previous viz if it exists
+      if (vizRef.current) {
+        vizRef.current.dispose();
+      }
+
+      const vizUrl = `${tableauConfig.serverUrl}/t/${tableauConfig.site}/views/${selectedWorkbook.workbook}/${selectedWorkbook.view}`;
+      const options = {
+        hideTabs: true,
+        hideToolbar: false,
+        width: '100%',
+        height: '100%',
+        onFirstInteractive: function() {
+          console.log('Tableau viz is interactive');
+        }
+      };
+
+      // Create new viz with JWT token
+      vizRef.current = new tableau.Viz(vizContainerRef.current, vizUrl, options);
+    }
+
+    // Cleanup on unmount
+    return () => {
+      if (vizRef.current) {
+        vizRef.current.dispose();
+      }
+    };
+  }, [tableauConfig, tableauToken, selectedWorkbook]);
+
   const handleLogout = () => {
     localStorage.removeItem('token');
     navigate('/');
@@ -105,7 +133,6 @@ const Dashboard = () => {
           Logout
         </motion.button>
       </motion.header>
-
       <main className="p-8">
         <div className="mb-6">
           <motion.div
@@ -162,24 +189,14 @@ const Dashboard = () => {
                 <h2 className="text-2xl font-bold text-gray-800">{selectedWorkbook.name}</h2>
                 <p className="text-gray-600">{selectedWorkbook.description}</p>
               </div>
-              <div className="w-full h-full">
-                {tableauConfig && tableauToken ? (
-                  <tableau-viz
-                    id="tableau-viz"
-                    src={`${tableauConfig.serverUrl}/t/${tableauConfig.site}/views/${selectedWorkbook.workbook}/${selectedWorkbook.view}`}
-                    token={tableauToken}
-                    width="100%"
-                    height="100%"
-                    hide-tabs="true"
-                    toolbar="bottom"
-                  ></tableau-viz>
-                ) : (
+              <div className="w-full h-full" ref={vizContainerRef}>
+                {!tableauConfig || !tableauToken ? (
                   <div className="text-center text-gray-600">
                     <p>Failed to load Tableau dashboard. Please check your configuration.</p>
                     <p className="text-sm mt-2">Token: {tableauToken ? 'Available' : 'Missing'}</p>
                     <p className="text-sm">Config: {tableauConfig ? 'Available' : 'Missing'}</p>
                   </div>
-                )}
+                ) : null}
               </div>
             </motion.div>
           ) : (

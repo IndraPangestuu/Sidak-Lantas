@@ -19,7 +19,7 @@ const TABLEAU_PASSWORD = process.env.TABLEAU_PASSWORD || '4ministrator!';
 // Create axios instance with proper SSL configuration
 const axiosInstance = axios.create({
   httpsAgent: new https.Agent({
-    rejectUnauthorized: false // For self-signed certificates in dev; set to true in prod
+    rejectUnauthorized: false // For self-signed certificates
   }),
   timeout: 30000
 });
@@ -37,9 +37,15 @@ async function authenticateTableau() {
       credentials: {
         name: TABLEAU_USERNAME,
         password: TABLEAU_PASSWORD,
-        site: { contentUrl: '' }
+        site: {
+          contentUrl: ''
+        }
       }
     };
+
+    console.log('Authenticating with Tableau Server...');
+    console.log('Server URL:', TABLEAU_SERVER);
+    console.log('Username:', TABLEAU_USERNAME);
 
     const response = await axiosInstance.post(signInUrl, signInPayload, {
       headers: {
@@ -48,6 +54,7 @@ async function authenticateTableau() {
       }
     });
 
+    console.log('Authentication successful');
     return {
       token: response.data.credentials.token,
       siteId: response.data.credentials.site.id
@@ -101,19 +108,89 @@ async function fetchTableauWorkbooks() {
 
     console.log(`Fetched ${workbooks.length} workbooks from Tableau Server`);
     return workbooks;
+
   } catch (error) {
     console.error('Failed to fetch workbooks from Tableau:', error.response?.data || error.message);
-    return getMockWorkbooks(); // Fallback to mock data if Tableau is unavailable
+
+    // Fallback to mock data if Tableau is unavailable
+    console.log('Falling back to mock workbooks data');
+    return getMockWorkbooks();
   }
 }
 
 // Fallback mock workbooks
 function getMockWorkbooks() {
   return [
-    { id: 'dashboard-sebaran-pelanggaran', name: 'Dashboard Sebaran Pelanggaran', workbook: 'DashboardSebaranPelanggaran', view: 'Dashboard', description: 'Dashboard untuk melihat sebaran pelanggaran lalu lintas' },
-    { id: 'dashboard-summary-dakgar', name: 'Dashboard Summary Dakgar', workbook: 'DashboardSummaryDakgar', view: 'Summary', description: 'Ringkasan data DAKGAR LANTAS' },
-    { id: 'korlantas-trend-pelanggaran', name: 'Korlantas Trend Pelanggaran', workbook: 'KorlantasTrendPelanggaran', view: 'Trend', description: 'Trend pelanggaran lalu lintas Korlantas' },
-    // Add other mock workbooks
+    {
+      id: 'dashboard-sebaran-pelanggaran',
+      name: 'Dashboard Sebaran Pelanggaran',
+      workbook: 'DashboardSebaranPelanggaran',
+      view: 'Dashboard',
+      description: 'Dashboard untuk melihat sebaran pelanggaran lalu lintas'
+    },
+    {
+      id: 'dashboard-summary-dakgar',
+      name: 'Dashboard Summary Dakgar',
+      workbook: 'DashboardSummaryDakgar',
+      view: 'Summary',
+      description: 'Ringkasan data DAKGAR LANTAS'
+    },
+    {
+      id: 'korlantas-trend-pelanggaran',
+      name: 'Korlantas Trend Pelanggaran',
+      workbook: 'KorlantasTrendPelanggaran',
+      view: 'Trend',
+      description: 'Trend pelanggaran lalu lintas Korlantas'
+    },
+    {
+      id: 'dashboard-demografi-pelanggaran',
+      name: 'Dashboard Demografi Pelanggaran',
+      workbook: 'DashboardDemografiPelanggaran',
+      view: 'Demografi',
+      description: 'Analisis demografi pelanggar lalu lintas'
+    },
+    {
+      id: 'dashboard-denda',
+      name: 'Dashboard Denda',
+      workbook: 'DashboardDenda',
+      view: 'Denda',
+      description: 'Dashboard monitoring denda tilang'
+    },
+    {
+      id: 'dashboard-blangko-e-tilang',
+      name: 'Dashboard Blangko E-Tilang',
+      workbook: 'DashboardBlangkoE-Tilang',
+      view: 'Blangko',
+      description: 'Monitoring blangko E-Tilang'
+    },
+    {
+      id: 'dashboard-dakgar-lantas-fin',
+      name: 'Dashboard DAKGAR LANTAS Final',
+      workbook: 'DashboardDAKGARLANTAS_Fin',
+      view: 'Dashboard',
+      description: 'Dashboard DAKGAR LANTAS versi final'
+    },
+    {
+      id: 'anatomi-perkara',
+      name: 'Anatomi Perkara',
+      workbook: 'AnatomiPerkara',
+      view: 'Perkara',
+      description: 'Analisis anatomi perkara tilang'
+    },
+    {
+      id: 'dashboard-teguran',
+      name: 'Dashboard Teguran',
+      workbook: 'Teguran',
+      view: 'Teguran',
+      description: 'Dashboard monitoring teguran'
+    },
+    {
+      id: 'dashboard-home',
+      name: 'Dashboard Home',
+      workbook: 'home',
+      view: 'Home',
+      description: 'Dashboard utama Korlantas'
+    }
   ];
 }
 
@@ -144,13 +221,19 @@ app.post('/api/login', async (req, res) => {
     return res.status(401).json({ message: 'Invalid credentials' });
   }
 
-  const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET, { expiresIn: '24h' });
+  const token = jwt.sign(
+    { id: user.id, username: user.username },
+    JWT_SECRET,
+    { expiresIn: '24h' }
+  );
+
   res.json({ token });
 });
 
 // Verify token endpoint
 app.get('/api/verify', (req, res) => {
   const token = req.headers.authorization?.split(' ')[1];
+
   if (!token) {
     return res.status(401).json({ message: 'No token provided' });
   }
@@ -163,10 +246,10 @@ app.get('/api/verify', (req, res) => {
   }
 });
 
-// Tableau JWT token endpoint
+// Tableau JWT token endpoint - supports multiple workbooks
 app.get('/api/tableau-token', (req, res) => {
   const token = req.headers.authorization?.split(' ')[1];
-  const { workbook, view } = req.query;
+  const { workbook, view } = req.query; // Allow dynamic workbook and view selection
 
   if (!token) {
     return res.status(401).json({ message: 'No token provided' });
@@ -175,6 +258,7 @@ app.get('/api/tableau-token', (req, res) => {
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
 
+    // Create Tableau-specific JWT for embedded views according to Tableau Server documentation
     const tableauPayload = {
       "iss": TABLEAU_SERVER,
       "sub": decoded.username,
@@ -193,13 +277,19 @@ app.get('/api/tableau-token', (req, res) => {
 
     const tableauToken = jwt.sign(tableauPayload, TABLEAU_SECRET, { algorithm: 'HS256' });
 
-    res.json({ tableauToken, serverUrl: TABLEAU_SERVER, site: '', workbook: workbook || 'Superstore', view: view || 'Dashboard' });
+    res.json({
+      tableauToken,
+      serverUrl: TABLEAU_SERVER,
+      site: '',
+      workbook: workbook || 'Superstore',
+      view: view || 'Dashboard'
+    });
   } catch (error) {
     res.status(401).json({ message: 'Invalid token' });
   }
 });
 
-// Get available workbooks endpoint
+// Get available workbooks endpoint - fetches from Tableau Server
 app.get('/api/workbooks', async (req, res) => {
   const token = req.headers.authorization?.split(' ')[1];
 
@@ -209,6 +299,7 @@ app.get('/api/workbooks', async (req, res) => {
 
   try {
     jwt.verify(token, JWT_SECRET);
+
     const workbooks = await fetchTableauWorkbooks();
     res.json({ workbooks });
   } catch (error) {
@@ -218,12 +309,18 @@ app.get('/api/workbooks', async (req, res) => {
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'OK', tableau: 'connected', cache: workbooksCache ? 'active' : 'empty' });
+  res.json({
+    status: 'OK',
+    database: 'standalone-mode',
+    tableau: 'connected',
+    cache: workbooksCache ? 'active' : 'empty'
+  });
 });
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
   console.log(`Tableau Server: ${TABLEAU_SERVER}`);
+  console.log('Workbooks will be fetched from Tableau Server on first request');
 });
 
 // Graceful shutdown

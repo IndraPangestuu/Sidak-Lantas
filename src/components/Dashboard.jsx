@@ -11,6 +11,7 @@ const Dashboard = () => {
   const [workbooks, setWorkbooks] = useState([]);
   const [selectedWorkbook, setSelectedWorkbook] = useState(null);
 
+  // Fetch workbooks from the API
   useEffect(() => {
     const fetchWorkbooks = async () => {
       const token = localStorage.getItem('token');
@@ -20,7 +21,7 @@ const Dashboard = () => {
       }
 
       try {
-        const response = await axios.get('http://localhost:5000/api/workbooks', {
+        const response = await axios.get('https://localhost:5000/api/workbooks', {
           headers: { Authorization: `Bearer ${token}` }
         });
         setWorkbooks(response.data.workbooks);
@@ -29,12 +30,14 @@ const Dashboard = () => {
         }
       } catch (error) {
         console.error('Failed to fetch workbooks:', error);
+        alert("Failed to load workbooks. Please try again later.");
       }
     };
 
     fetchWorkbooks();
   }, [navigate]);
 
+  // Fetch Tableau token and configuration when a workbook is selected
   useEffect(() => {
     const fetchTableauToken = async () => {
       if (!selectedWorkbook) return;
@@ -54,7 +57,7 @@ const Dashboard = () => {
         setTableauConfig(response.data);
       } catch (error) {
         console.error('Failed to fetch Tableau token:', error);
-        // For demo purposes, we'll show a placeholder
+        alert("Failed to fetch Tableau token. Please check your Tableau configuration.");
       } finally {
         setLoading(false);
       }
@@ -63,6 +66,7 @@ const Dashboard = () => {
     fetchTableauToken();
   }, [navigate, selectedWorkbook]);
 
+  // Handle user logout
   const handleLogout = () => {
     localStorage.removeItem('token');
     navigate('/');
@@ -101,6 +105,7 @@ const Dashboard = () => {
           Logout
         </motion.button>
       </motion.header>
+
       <main className="p-8">
         <div className="mb-6">
           <motion.div
@@ -161,7 +166,7 @@ const Dashboard = () => {
                 {tableauConfig && tableauToken ? (
                   <tableau-viz
                     id="tableau-viz"
-                    src={`${tableauConfig.serverUrl}t/${tableauConfig.site}/views/${selectedWorkbook.workbook}/${selectedWorkbook.view}`}
+                    src={`${tableauConfig.serverUrl}/t/${tableauConfig.site}/views/${selectedWorkbook.workbook}/${selectedWorkbook.view}`}
                     token={tableauToken}
                     width="100%"
                     height="100%"
@@ -171,6 +176,8 @@ const Dashboard = () => {
                 ) : (
                   <div className="text-center text-gray-600">
                     <p>Failed to load Tableau dashboard. Please check your configuration.</p>
+                    <p className="text-sm mt-2">Token: {tableauToken ? 'Available' : 'Missing'}</p>
+                    <p className="text-sm">Config: {tableauConfig ? 'Available' : 'Missing'}</p>
                   </div>
                 )}
               </div>
